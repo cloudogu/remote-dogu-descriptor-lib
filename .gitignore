@@ -23,3 +23,15 @@ go.work.sum
 
 # env file
 .env
+
+# editor and IDE paraphernalia
+.idea
+*.swp
+*.swo
+*.iml
+.code
+*~
+
+# ignore personal information
+.myenv
+.netrc
