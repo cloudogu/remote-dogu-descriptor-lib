@@ -151,7 +151,7 @@ func (r *httpRemote) receiveDoguFromRemoteOrCache(requestUrl string, cacheDirect
 	})
 
 	if errors.Is(err, errNotFound) {
-		return nil, dogu.ErrDoguDescriptorNotFound
+		return nil, dogu.DoguDescriptorNotFoundError
 	}
 
 	err = r.handleCachingIfNecessary(&remoteDogu, err, cacheDirectory, "content.json")
