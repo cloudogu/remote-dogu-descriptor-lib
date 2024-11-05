@@ -35,3 +35,6 @@ go.work.sum
 # ignore personal information
 .myenv
 .netrc
+
+
+**/content.json

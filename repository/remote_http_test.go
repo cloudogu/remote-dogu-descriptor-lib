@@ -23,6 +23,14 @@ func Test_newHTTPRemote(t *testing.T) {
 
 		require.Error(t, err)
 	})
+	t.Run("Should return new httpRemote", func(t *testing.T) {
+		config := &core.Remote{}
+		creds := &core.Credentials{}
+
+		_, err := newHTTPRemote(config, creds)
+
+		require.NoError(t, err)
+	})
 }
 
 func Test_checkStatusCode(t *testing.T) {
@@ -129,6 +137,26 @@ func Test_extractRemoteErrorBody(t *testing.T) {
 
 		// then
 		assert.Equal(t, "error", actual)
+	})
+}
+
+func Test_isDoguResponseType(t *testing.T) {
+	t.Run("should return true", func(t *testing.T) {
+		responseType := &core.Dogu{}
+		// when
+		actual := isDoguResponseType(&responseType)
+
+		// then
+		assert.Equal(t, true, actual)
+	})
+
+	t.Run("should return false", func(t *testing.T) {
+		responseType := &core.Remote{}
+		// when
+		actual := isDoguResponseType(&responseType)
+
+		// then
+		assert.Equal(t, false, actual)
 	})
 }
 
