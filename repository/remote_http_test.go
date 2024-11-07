@@ -136,7 +136,7 @@ func Test_extractRemoteErrorBody(t *testing.T) {
 		actual := extractRemoteBody(responseBody, 400)
 
 		// then
-		assert.Equal(t, "error", actual)
+		assert.Contains(t, "error while parsing response body: unexpected end of JSON input", actual)
 	})
 }
 

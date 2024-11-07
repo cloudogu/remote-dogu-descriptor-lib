@@ -284,8 +284,7 @@ func extractRemoteBody(responseBodyReader io.ReadCloser, statusCode int) string 
 	buf := new(strings.Builder)
 	_, err := io.Copy(buf, responseBodyReader)
 	if err != nil {
-		core.GetLogger().Errorf("error while copying response body: %s", err.Error())
-		return "error"
+		return fmt.Sprintf("error while copying response body: %s", err.Error())
 	}
 
 	responseBody := []byte(buf.String())
@@ -293,8 +292,7 @@ func extractRemoteBody(responseBodyReader io.ReadCloser, statusCode int) string 
 	body := &remoteResponseBody{statusCode: statusCode}
 	jsonErr := json.Unmarshal(responseBody, body)
 	if jsonErr != nil {
-		core.GetLogger().Errorf("error while parsing response body: %s", jsonErr.Error())
-		return "error"
+		return fmt.Sprintf("error while parsing response body: %s", jsonErr.Error())
 	}
 
 	return body.String()
