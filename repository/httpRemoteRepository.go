@@ -223,7 +223,7 @@ func (r *httpRemote) request(requestURL string, responseType interface{}, useCre
 
 	request, err := http.NewRequest("GET", requestURL, nil)
 	if err != nil {
-		return errors.Wrap(err, "failed to prepare request")
+		return fmt.Errorf("failed to prepare request: %w", err)
 	}
 
 	if useCredentials && r.credentials != nil {
@@ -232,7 +232,7 @@ func (r *httpRemote) request(requestURL string, responseType interface{}, useCre
 
 	resp, err := r.client.Do(request)
 	if err != nil {
-		return errors.Wrap(err, "failed to request remote registry")
+		return fmt.Errorf("failed to request remote registry: %w", err)
 	}
 
 	err = checkStatusCode(resp)
@@ -243,12 +243,12 @@ func (r *httpRemote) request(requestURL string, responseType interface{}, useCre
 	defer util.CloseButLogError(resp.Body, "requesting json from remove")
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return errors.Wrap(err, "failed to read response body")
+		return fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	doguFromString, version, err := core.ReadDoguFromString(string(body))
 	if err != nil {
-		return errors.Wrap(err, "failed to parse json of response")
+		return fmt.Errorf("failed to parse json of request: %w", err)
 	}
 
 	if version == core.DoguApiV1 {
