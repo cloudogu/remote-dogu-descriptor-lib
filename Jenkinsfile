@@ -55,9 +55,7 @@ node('docker') {
         }
 
 
-        stage('Release') {
-            stageAutomaticRelease()
-        }
+        stageAutomaticRelease()
     }
 }
 
