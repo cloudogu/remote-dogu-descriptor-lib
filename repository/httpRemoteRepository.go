@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"github.com/cloudogu/ces-commons-lib/dogu"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -101,7 +100,7 @@ func createProxyHTTPTransport(config *core.Remote) (*http.Transport, error) {
 
 		proxyURL, err := neturl.Parse(proxyURLString)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to parse proxy url %s", proxyURLString)
+			return nil, fmt.Errorf("failed to parse proxy url %s: %w", proxyURLString, err)
 		}
 		transport.Proxy = http.ProxyURL(proxyURL)
 		appendProxyAuthorizationIfRequired(transport, &config.ProxySettings)
@@ -126,17 +125,24 @@ func appendProxyAuthorizationIfRequired(transport *http.Transport, proxySettings
 	}
 }
 
-// Get returns the detail about a dogu from the remote server.
-func (r *httpRemote) GetLatest(context context.Context, name dogu.QualifiedDoguName) (*core.Dogu, error) {
-	requestUrl := r.urlSchema.Get(string(name.SimpleName))
+// GetLatest returns the detail about the latest dogu from the remote server by name.
+func (r *httpRemote) GetLatest(_ context.Context, name dogu.QualifiedName) (*core.Dogu, error) {
+	err := name.Validate()
+	if err != nil {
+		return nil, fmt.Errorf("qualified dogu name is not valid (name: %s): %w", name.String(), err)
+	}
+	requestUrl := r.urlSchema.Get(name.String())
 	cacheDirectory := filepath.Join(r.endpointCacheDir, string(name.SimpleName))
 	return r.receiveDoguFromRemoteOrCache(requestUrl, cacheDirectory)
 }
 
-// GetVersion returns a version specific detail about the dogu. Name is mandatory. Version is optional; if no version
-// is given then the newest version will be returned.
-func (r *httpRemote) Get(context context.Context, doguVersion dogu.QualifiedDoguVersion) (*core.Dogu, error) {
-	requestUrl := r.urlSchema.GetVersion(string(doguVersion.Name.SimpleName), doguVersion.Version.Raw)
+// Get returns a version specific detail about the dogu.
+func (r *httpRemote) Get(_ context.Context, doguVersion dogu.QualifiedVersion) (*core.Dogu, error) {
+	err := doguVersion.Name.Validate()
+	if err != nil {
+		return nil, fmt.Errorf("qualified dogu name is not valid (name: %s): %w", doguVersion.Name.String(), err)
+	}
+	requestUrl := r.urlSchema.GetVersion(doguVersion.Name.String(), doguVersion.Version.Raw)
 	cacheDirectory := filepath.Join(r.endpointCacheDir, string(doguVersion.Name.SimpleName), doguVersion.Version.Raw)
 	return r.receiveDoguFromRemoteOrCache(requestUrl, cacheDirectory)
 }
@@ -151,7 +157,7 @@ func (r *httpRemote) receiveDoguFromRemoteOrCache(requestUrl string, cacheDirect
 	})
 
 	if errors.Is(err, errNotFound) {
-		return nil, dogu.DoguDescriptorNotFoundError
+		return nil, dogu.ErrDescriptorNotFound
 	}
 
 	err = r.handleCachingIfNecessary(&remoteDogu, err, cacheDirectory, "content.json")
@@ -225,12 +231,12 @@ func (r *httpRemote) readCacheWithFilename(responseType interface{}, cacheDirect
 	cacheFile := filepath.Join(cacheDirectory, filename)
 
 	if isDoguResponseType(responseType) {
-		dogu, _, err := core.ReadDoguFromFile(cacheFile)
+		doguFromFile, _, err := core.ReadDoguFromFile(cacheFile)
 		if err != nil {
 			return errors.Wrapf(err, "failed to read cache %s", cacheFile)
 		}
 		//nolint:forcetypeassert
-		*responseType.(**core.Dogu) = dogu
+		*responseType.(**core.Dogu) = doguFromFile
 	} else if isDoguSliceResponseType(responseType) {
 		dogus, _, err := core.ReadDogusFromFile(cacheFile)
 		if err != nil {
@@ -286,22 +292,22 @@ func (r *httpRemote) request(requestURL string, responseType interface{}, useCre
 	}
 
 	defer util.CloseButLogError(resp.Body, "requesting json from remove")
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return errors.Wrap(err, "failed to read response body")
 	}
 
 	if isDoguResponseType(responseType) {
-		dogu, version, err := core.ReadDoguFromString(string(body))
+		doguFromString, version, err := core.ReadDoguFromString(string(body))
 		if err != nil {
 			return errors.Wrap(err, "failed to parse json of response")
 		}
 
 		if version == core.DoguApiV1 {
-			core.GetLogger().Warningf("Read dogu %s in v1 format from registry.", dogu.Name)
+			core.GetLogger().Warningf("Read dogu %s in v1 format from registry.", doguFromString.Name)
 		}
 		//nolint:forcetypeassert
-		*responseType.(**core.Dogu) = dogu
+		*responseType.(**core.Dogu) = doguFromString
 	} else if isDoguSliceResponseType(responseType) {
 		dogus, version, err := core.ReadDogusFromString(string(body))
 		if err != nil {
