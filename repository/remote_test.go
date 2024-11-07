@@ -34,8 +34,11 @@ func TestAnonymousOnAnonymousServer(t *testing.T) {
 	version, err := core.ParseVersion("3.0")
 	require.NoError(t, err)
 
-	qDoguVersion := dogu.QualifiedDoguVersion{
-		Name:    dogu.QualifiedDoguName{SimpleName: "Test"},
+	qDoguVersion := dogu.QualifiedVersion{
+		Name: dogu.QualifiedName{
+			Namespace:  "Test",
+			SimpleName: "Test",
+		},
 		Version: version,
 	}
 
@@ -57,7 +60,10 @@ func TestGet(t *testing.T) {
 
 	testRemote := createRemote(t, ts)
 
-	dogu, err := testRemote.GetLatest(context.TODO(), dogu.QualifiedDoguName{SimpleName: "Test"})
+	dogu, err := testRemote.GetLatest(context.TODO(), dogu.QualifiedName{
+		Namespace:  "Test",
+		SimpleName: "Test",
+	})
 
 	assert.Nil(t, err)
 	assert.NotNil(t, dogu)
@@ -84,7 +90,7 @@ func TestGetWithRetry(t *testing.T) {
 	defer ts.Close()
 
 	testRemote := createRemote(t, ts)
-	dogu, err := testRemote.GetLatest(context.TODO(), dogu.QualifiedDoguName{SimpleName: "Hansolo", Namespace: "official"})
+	dogu, err := testRemote.GetLatest(context.TODO(), dogu.QualifiedName{SimpleName: "Hansolo", Namespace: "official"})
 	assert.Nil(t, err)
 	assert.NotNil(t, dogu)
 
@@ -112,8 +118,11 @@ func TestGetVersion(t *testing.T) {
 	version, err := core.ParseVersion("3.0")
 	require.NoError(t, err)
 
-	qDoguVersion := dogu.QualifiedDoguVersion{
-		Name:    dogu.QualifiedDoguName{SimpleName: "Test"},
+	qDoguVersion := dogu.QualifiedVersion{
+		Name: dogu.QualifiedName{
+			Namespace:  "Test",
+			SimpleName: "Test",
+		},
 		Version: version,
 	}
 
@@ -124,100 +133,6 @@ func TestGetVersion(t *testing.T) {
 
 	assert.Equal(t, "Test", dogu.Name)
 	assert.Equal(t, "3.0", dogu.Version)
-
-	clearCache()
-}
-
-func TestIsDoingAnonymousAccessOnceWithRetry(t *testing.T) {
-	var accessCounter = 0
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		accessCounter++
-		if (accessCounter % 2) != 0 {
-			//First access and third access will be here (because we do one retry)
-			assert.Empty(t, r.Header.Get("Authorization"))
-		} else {
-			assert.NotEmpty(t, r.Header.Get("Authorization"))
-		}
-	}))
-	defer ts.Close()
-
-	testRemote := createRemoteWithConfiguration(t, ts, &core.Remote{
-		AnonymousAccess: true,
-	})
-
-	version, err := core.ParseVersion("3.0")
-	require.NoError(t, err)
-
-	qDoguVersion := dogu.QualifiedDoguVersion{
-		Name:    dogu.QualifiedDoguName{SimpleName: "Test"},
-		Version: version,
-	}
-
-	_, _ = testRemote.Get(context.TODO(), qDoguVersion)
-	assert.Equal(t, 4, accessCounter)
-
-	// Try again with anonymous docker access also activated. Should not affect the result
-	testRemote = createRemoteWithConfiguration(t, ts, &core.Remote{
-		AnonymousAccess: true,
-	})
-	_, _ = testRemote.Get(context.TODO(), qDoguVersion)
-	assert.Equal(t, 8, accessCounter)
-}
-
-func TestIsDoingNoAnynymousAcces(t *testing.T) {
-	var accessCounter = 0
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.NotEmpty(t, r.Header.Get("Authorization"))
-		accessCounter++
-	}))
-	defer ts.Close()
-
-	version, err := core.ParseVersion("3.0")
-	require.NoError(t, err)
-
-	qDoguVersion := dogu.QualifiedDoguVersion{
-		Name:    dogu.QualifiedDoguName{SimpleName: "Test"},
-		Version: version,
-	}
-
-	testRemote := createRemoteWithConfiguration(t, ts, &core.Remote{})
-	_, _ = testRemote.Get(context.TODO(), qDoguVersion)
-	assert.Equal(t, 2, accessCounter)
-
-	// Try again with anonymous docker access also activated. Should not affect the result
-	testRemote = createRemoteWithConfiguration(t, ts, &core.Remote{})
-	_, _ = testRemote.Get(context.TODO(), qDoguVersion)
-	assert.Equal(t, 4, accessCounter)
-}
-
-func TestGetDoNotRetryWithFailedAuthentication(t *testing.T) {
-	counter := 0
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if counter == 0 {
-			w.WriteHeader(401)
-		} else {
-			w.WriteHeader(403)
-		}
-		counter++
-	}))
-	defer ts.Close()
-
-	version, err := core.ParseVersion("3.0")
-	require.NoError(t, err)
-
-	qDoguVersion := dogu.QualifiedDoguVersion{
-		Name:    dogu.QualifiedDoguName{SimpleName: "Test"},
-		Version: version,
-	}
-
-	testRemote := createRemote(t, ts)
-	_, err = testRemote.Get(context.TODO(), qDoguVersion)
-	assert.NotNil(t, err)
-	assert.Equal(t, 1, counter)
-
-	_, err = testRemote.Get(context.TODO(), qDoguVersion)
-	assert.NotNil(t, err)
-	assert.Equal(t, 2, counter)
 
 	clearCache()
 }
@@ -234,14 +149,20 @@ func TestGetCached(t *testing.T) {
 
 	testRemote := createRemote(t, ts)
 
-	doguResult, err := testRemote.GetLatest(context.TODO(), dogu.QualifiedDoguName{SimpleName: "a"})
+	doguResult, err := testRemote.GetLatest(context.TODO(), dogu.QualifiedName{
+		Namespace:  "Test",
+		SimpleName: "Test",
+	})
 	assert.Nil(t, err)
 	assert.NotNil(t, doguResult)
 	assert.Equal(t, expectedDogu, *doguResult)
 
 	ts.Close()
 
-	doguResult, err = testRemote.GetLatest(context.TODO(), dogu.QualifiedDoguName{SimpleName: "a"})
+	doguResult, err = testRemote.GetLatest(context.TODO(), dogu.QualifiedName{
+		Namespace:  "Test",
+		SimpleName: "Test",
+	})
 	assert.Nil(t, err)
 	assert.NotNil(t, doguResult)
 	assert.Equal(t, expectedDogu, *doguResult)

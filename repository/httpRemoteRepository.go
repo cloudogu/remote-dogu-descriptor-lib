@@ -132,7 +132,7 @@ func (r *httpRemote) GetLatest(_ context.Context, name dogu.QualifiedName) (*cor
 		return nil, fmt.Errorf("qualified dogu name is not valid (name: %s): %w", name.String(), err)
 	}
 	requestUrl := r.urlSchema.Get(name.String())
-	cacheDirectory := filepath.Join(r.endpointCacheDir, string(name.SimpleName))
+	cacheDirectory := filepath.Join(r.endpointCacheDir, name.String())
 	return r.receiveDoguFromRemoteOrCache(requestUrl, cacheDirectory)
 }
 
@@ -143,112 +143,61 @@ func (r *httpRemote) Get(_ context.Context, doguVersion dogu.QualifiedVersion) (
 		return nil, fmt.Errorf("qualified dogu name is not valid (name: %s): %w", doguVersion.Name.String(), err)
 	}
 	requestUrl := r.urlSchema.GetVersion(doguVersion.Name.String(), doguVersion.Version.Raw)
-	cacheDirectory := filepath.Join(r.endpointCacheDir, string(doguVersion.Name.SimpleName), doguVersion.Version.Raw)
+	cacheDirectory := filepath.Join(r.endpointCacheDir, doguVersion.Name.String(), doguVersion.Version.Raw)
 	return r.receiveDoguFromRemoteOrCache(requestUrl, cacheDirectory)
 }
 
-func (r *httpRemote) receiveDoguFromRemoteOrCache(requestUrl string, cacheDirectory string) (*core.Dogu, error) {
-	var remoteDogu *core.Dogu
-	err := r.retrier.Run(func() error {
-		if r.remoteConfiguration.AnonymousAccess {
-			return r.requestWithoutCredentialsFirst(requestUrl, &remoteDogu)
-		}
-		return r.request(requestUrl, &remoteDogu, true)
-	})
-
-	if errors.Is(err, errNotFound) {
-		return nil, dogu.ErrDescriptorNotFound
-	}
-
-	err = r.handleCachingIfNecessary(&remoteDogu, err, cacheDirectory, "content.json")
+func (r *httpRemote) receiveDoguFromRemoteOrCache(requestUrl string, dirname string) (*core.Dogu, error) {
+	var remoteDogu, err = r.readCachedDogu(dirname)
 	if err != nil {
-		return nil, err
+		err = r.retrier.Run(func() error {
+			requestErr := r.requestWithoutCredentialsFirst(requestUrl, &remoteDogu)
+			if requestErr != nil {
+				return r.request(requestUrl, &remoteDogu, true)
+			}
+			return requestErr
+		})
+
+		if errors.Is(err, errNotFound) {
+			return nil, dogu.ErrDescriptorNotFound
+		}
+
+		err = r.writeDoguToCache(remoteDogu, dirname)
+		if err != nil {
+			return &core.Dogu{}, fmt.Errorf("failed to write dogu to cache: %w", err)
+		}
 	}
 
 	return remoteDogu, nil
 }
 
-// handleCachingIfNecessary handles the caching if useCache is true. This means, it ...
-// - reads from cache if requestError is not nil
-// - updates the cache content if the request was successful
-// If useCache is false, the requestError is returned.
-func (r *httpRemote) handleCachingIfNecessary(cachingType interface{}, requestError error, dirname string, filename string) error {
+func (r *httpRemote) readCachedDogu(dirname string) (*core.Dogu, error) {
 	if r.useCache {
-		if requestError != nil {
-			core.GetLogger().Errorf("failed to read from remote registry: %s", requestError)
-			core.GetLogger().Info("reading from cache")
-			err := r.readCacheWithFilename(cachingType, dirname, filename)
-			if err != nil {
-				return errors.Wrap(err, "failed to read from remote registry and cache")
-			}
-		} else {
-			err := r.writeCacheWithFilename(cachingType, dirname, filename)
-			if err != nil {
-				return errors.Wrap(err, "failed to write to cache")
-			}
+		cacheFile := filepath.Join(dirname, "content.json")
+		doguFromFile, _, err := core.ReadDoguFromFile(cacheFile)
+		if err != nil {
+			return &core.Dogu{}, fmt.Errorf("failed to read from remote registry and cache: %w", err)
 		}
-	} else {
-		if requestError != nil {
-			return errors.Wrap(requestError, "failed to read from remote registry")
-		}
+		return doguFromFile, nil
 	}
-	return nil
+	return &core.Dogu{}, fmt.Errorf("useCache is not activated")
 }
 
-func (r *httpRemote) writeCacheWithFilename(responseType interface{}, cacheDirectory string, filename string) error {
-	// cache
-	core.GetLogger().Debug("storing result from ", r.endpoint, " into cacheDir ", cacheDirectory)
-	err := os.MkdirAll(cacheDirectory, os.ModePerm)
-
+func (r *httpRemote) writeDoguToCache(dogu *core.Dogu, dirname string) error {
+	err := os.MkdirAll(dirname, os.ModePerm)
 	if nil != err {
-		return errors.Wrap(err, "failed to create cache directory "+cacheDirectory)
+		return fmt.Errorf("failed to create cache directory %s: %w", dirname, err)
 	}
 
-	cacheFile := filepath.Join(cacheDirectory, filename)
-
-	if isDoguResponseType(responseType) {
-		//nolint:forcetypeassert
-		err = core.WriteDoguToFile(cacheFile, *responseType.(**core.Dogu))
-	} else if isDoguSliceResponseType(responseType) {
-		//nolint:forcetypeassert
-		err = core.WriteDogusToFile(cacheFile, *responseType.(*[]*core.Dogu))
-	} else {
-		err = util.WriteJSONFile(responseType, cacheFile)
-	}
+	cacheFile := filepath.Join(dirname, "content.json")
+	err = core.WriteDoguToFile(cacheFile, dogu)
 
 	if nil != err {
 		removeErr := os.Remove(cacheFile)
 		if removeErr != nil {
 			core.GetLogger().Warningf("failed to remove cache file %s", cacheFile)
 		}
-		return errors.Wrapf(err, "failed to write cache %s", cacheFile)
-	}
-
-	return nil
-}
-
-func (r *httpRemote) readCacheWithFilename(responseType interface{}, cacheDirectory string, filename string) error {
-	cacheFile := filepath.Join(cacheDirectory, filename)
-
-	if isDoguResponseType(responseType) {
-		doguFromFile, _, err := core.ReadDoguFromFile(cacheFile)
-		if err != nil {
-			return errors.Wrapf(err, "failed to read cache %s", cacheFile)
-		}
-		//nolint:forcetypeassert
-		*responseType.(**core.Dogu) = doguFromFile
-	} else if isDoguSliceResponseType(responseType) {
-		dogus, _, err := core.ReadDogusFromFile(cacheFile)
-		if err != nil {
-			return errors.Wrapf(err, "failed to read cache %s", cacheFile)
-		}
-		//nolint:forcetypeassert
-		*responseType.(*[]*core.Dogu) = dogus
-	} else {
-		err := util.ReadJSONFile(responseType, cacheFile)
-		if err != nil {
-			return errors.Wrapf(err, "failed to read cache %s", cacheFile)
-		}
+		return fmt.Errorf("failed to write cache %s: %w", cacheFile, err)
 	}
 
 	return nil
@@ -297,33 +246,16 @@ func (r *httpRemote) request(requestURL string, responseType interface{}, useCre
 		return errors.Wrap(err, "failed to read response body")
 	}
 
-	if isDoguResponseType(responseType) {
-		doguFromString, version, err := core.ReadDoguFromString(string(body))
-		if err != nil {
-			return errors.Wrap(err, "failed to parse json of response")
-		}
-
-		if version == core.DoguApiV1 {
-			core.GetLogger().Warningf("Read dogu %s in v1 format from registry.", doguFromString.Name)
-		}
-		//nolint:forcetypeassert
-		*responseType.(**core.Dogu) = doguFromString
-	} else if isDoguSliceResponseType(responseType) {
-		dogus, version, err := core.ReadDogusFromString(string(body))
-		if err != nil {
-			return errors.Wrap(err, "failed to parse json of response")
-		}
-		if version == core.DoguApiV1 {
-			core.GetLogger().Warning("Read dogus in v1 format from registry.")
-		}
-		//nolint:forcetypeassert
-		*responseType.(*[]*core.Dogu) = dogus
-	} else {
-		err = json.Unmarshal(body, responseType)
-		if err != nil {
-			return errors.Wrap(err, "failed to parse json of response")
-		}
+	doguFromString, version, err := core.ReadDoguFromString(string(body))
+	if err != nil {
+		return errors.Wrap(err, "failed to parse json of response")
 	}
+
+	if version == core.DoguApiV1 {
+		core.GetLogger().Warningf("Read dogu %s in v1 format from registry.", doguFromString.Name)
+	}
+	//nolint:forcetypeassert
+	*responseType.(**core.Dogu) = doguFromString
 
 	return nil
 }
@@ -366,16 +298,6 @@ func extractRemoteBody(responseBodyReader io.ReadCloser, statusCode int) string 
 	}
 
 	return body.String()
-}
-
-func isDoguResponseType(responseType interface{}) bool {
-	_, ok := responseType.(**core.Dogu)
-	return ok
-}
-
-func isDoguSliceResponseType(responseType interface{}) bool {
-	_, ok := responseType.(*[]*core.Dogu)
-	return ok
 }
 
 type remoteResponseBody struct {
