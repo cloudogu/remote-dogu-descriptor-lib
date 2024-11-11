@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/cloudogu/ces-commons-lib/dogu"
+	common "github.com/cloudogu/ces-commons-lib/repository"
 	"io"
 	"net/http"
 	"os"
@@ -24,10 +25,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-// common errors
-var errUnauthorized = errors.New("401 unauthorized, please login to proceed")
-var errForbidden = errors.New("403 forbidden, not enough privileges")
-var errNotFound = errors.New("404 not found")
 var defaultBackoff = retrier.ConstantBackoff(1, 100*time.Millisecond)
 
 // httpRemote is able to handle request to a remote registry.
@@ -52,7 +49,7 @@ func newHTTPRemote(remoteConfig *core.Remote, credentials *core.Credentials) (*h
 	}
 	netRetrier := retrier.New(
 		backoff,
-		retrier.BlacklistClassifier{errUnauthorized, errForbidden},
+		retrier.BlacklistClassifier{common.ErrUnauthorized, common.ErrForbidden},
 	)
 
 	checkSum := fmt.Sprintf("%x", sha256.Sum256([]byte(remoteConfig.CacheDir)))
@@ -158,7 +155,7 @@ func (r *httpRemote) receiveDoguFromRemoteOrCache(requestUrl string, dirname str
 			return requestErr
 		})
 
-		if errors.Is(err, errNotFound) {
+		if errors.Is(err, common.ErrNotFound) {
 			return nil, dogu.ErrDescriptorNotFound
 		}
 
@@ -264,11 +261,11 @@ func checkStatusCode(response *http.Response) error {
 	sc := response.StatusCode
 	switch sc {
 	case http.StatusUnauthorized:
-		return errUnauthorized
+		return common.ErrUnauthorized
 	case http.StatusForbidden:
-		return errForbidden
+		return common.ErrForbidden
 	case http.StatusNotFound:
-		return errNotFound
+		return common.ErrNotFound
 	default:
 		if sc >= 300 {
 			furtherExplanation := extractRemoteBody(response.Body, sc)

@@ -4,6 +4,8 @@ github.com/cloudogu/ces-commons-lib v0.0.0-20241029140430-e2298b441772 h1:IqmCbI
 github.com/cloudogu/ces-commons-lib v0.0.0-20241029140430-e2298b441772/go.mod h1:4T30F7XQlJTb3gD8dXCVK/IIbvQbXD5jQHWTA+VgCLI=
 github.com/cloudogu/ces-commons-lib v0.0.0-20241107084244-201ce50b2d36 h1:5LAHBHoUp7adoMP6SVHTgYk3FPELCoMlBfJ29wI0wIo=
 github.com/cloudogu/ces-commons-lib v0.0.0-20241107084244-201ce50b2d36/go.mod h1:Ldi/dVhgrZfsPkB2zaXs8IoT7ExhWvS36vcwx1ems2I=
+github.com/cloudogu/ces-commons-lib v0.0.0-20241111073702-1fcadb9fbc80 h1:/Wm46pLtHZxZlhiyneY4Q+NFKXRFgzronCsphAuzP9I=
+github.com/cloudogu/ces-commons-lib v0.0.0-20241111073702-1fcadb9fbc80/go.mod h1:Ldi/dVhgrZfsPkB2zaXs8IoT7ExhWvS36vcwx1ems2I=
 github.com/cloudogu/cesapp-lib v0.14.2 h1:AtRsQbS31d71DY7DXUhzwO07ZFI0Gz2+IHOhyeJdBhc=
 github.com/cloudogu/cesapp-lib v0.14.2/go.mod h1:52PfkrFYg54FjF8Se8P9b1zOfAhmg3PBFKr7YfS+Q+8=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
