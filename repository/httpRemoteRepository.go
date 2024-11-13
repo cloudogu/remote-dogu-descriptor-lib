@@ -175,11 +175,14 @@ func (r *httpRemote) readCachedDogu(dirname string) (*core.Dogu, error) {
 		cacheFile := filepath.Join(dirname, "content.json")
 		doguFromFile, _, err := core.ReadDoguFromFile(cacheFile)
 		if err != nil {
-			return &core.Dogu{}, fmt.Errorf("failed to read from remote registry and cache: %w", err)
+			return &core.Dogu{}, commonerrors.NewGenericError(fmt.Errorf("failed to read from remote registry and cache: %w", err))
+		}
+		if doguFromFile == nil {
+			return nil, commonerrors.NewNotFoundError(fmt.Errorf("dogu descriptor not found"))
 		}
 		return doguFromFile, nil
 	}
-	return &core.Dogu{}, fmt.Errorf("useCache is not activated")
+	return &core.Dogu{}, commonerrors.NewGenericError(fmt.Errorf("useCache is not activated"))
 }
 
 func (r *httpRemote) writeDoguToCache(dogu *core.Dogu, dirname string) error {
@@ -222,7 +225,7 @@ func (r *httpRemote) request(requestURL string, useCredentials bool) (*core.Dogu
 
 	request, err := http.NewRequest("GET", requestURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to prepare request: %w", err)
+		return nil, commonerrors.NewGenericError(fmt.Errorf("failed to prepare request: %w", err))
 	}
 
 	if useCredentials && r.credentials != nil {
@@ -231,7 +234,7 @@ func (r *httpRemote) request(requestURL string, useCredentials bool) (*core.Dogu
 
 	resp, err := r.client.Do(request)
 	if err != nil {
-		return nil, fmt.Errorf("failed to request remote registry: %w", err)
+		return nil, commonerrors.NewGenericError(fmt.Errorf("failed to request remote registry: %w", err))
 	}
 
 	err = checkStatusCode(resp)
@@ -242,12 +245,12 @@ func (r *httpRemote) request(requestURL string, useCredentials bool) (*core.Dogu
 	defer util.CloseButLogError(resp.Body, "requesting json from remove")
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
+		return nil, commonerrors.NewGenericError(fmt.Errorf("failed to read response body: %w", err))
 	}
 
 	doguFromString, version, err := core.ReadDoguFromString(string(body))
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse json of request: %w", err)
+		return nil, commonerrors.NewGenericError(fmt.Errorf("failed to parse json of request: %w", err))
 	}
 
 	if version == core.DoguApiV1 {
