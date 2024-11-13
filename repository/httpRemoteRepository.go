@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"github.com/cloudogu/ces-commons-lib/dogu"
 	commonerrors "github.com/cloudogu/ces-commons-lib/errors"
-	common "github.com/cloudogu/ces-commons-lib/repository"
 	"github.com/pkg/errors"
 	"io"
 	"net/http"
@@ -50,7 +49,7 @@ func newHTTPRemote(remoteConfig *core.Remote, credentials *core.Credentials) (*h
 	}
 	netRetrier := retrier.New(
 		backoff,
-		retrier.BlacklistClassifier{common.ErrUnauthorized, common.ErrForbidden},
+		retrier.BlacklistClassifier{commonerrors.NewUnauthorizedError(errors.New("")), commonerrors.NewForbiddenError(errors.New(""))},
 	)
 
 	checkSum := fmt.Sprintf("%x", sha256.Sum256([]byte(remoteConfig.CacheDir)))
@@ -157,8 +156,8 @@ func (r *httpRemote) receiveDoguFromRemoteOrCache(requestUrl string, dirname str
 			return err
 		})
 
-		if errors.Is(err, common.ErrNotFound) {
-			return nil, commonerrors.NewGenericError(err)
+		if err != nil {
+			return nil, err
 		}
 
 		err = r.writeDoguToCache(remoteDogu, dirname)
