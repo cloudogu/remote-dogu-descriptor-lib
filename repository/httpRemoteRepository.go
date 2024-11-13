@@ -8,7 +8,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/cloudogu/ces-commons-lib/dogu"
+	commonerrors "github.com/cloudogu/ces-commons-lib/errors"
 	common "github.com/cloudogu/ces-commons-lib/repository"
+	"github.com/pkg/errors"
 	"io"
 	"net/http"
 	"os"
@@ -22,7 +24,6 @@ import (
 	"github.com/cloudogu/cesapp-lib/remote"
 	"github.com/cloudogu/cesapp-lib/util"
 	"github.com/eapache/go-resiliency/retrier"
-	"github.com/pkg/errors"
 )
 
 var defaultBackoff = retrier.ConstantBackoff(1, 100*time.Millisecond)
@@ -148,15 +149,16 @@ func (r *httpRemote) receiveDoguFromRemoteOrCache(requestUrl string, dirname str
 	var remoteDogu, err = r.readCachedDogu(dirname)
 	if err != nil {
 		err = r.retrier.Run(func() error {
-			requestErr := r.requestWithoutCredentialsFirst(requestUrl, &remoteDogu)
-			if requestErr != nil {
-				return r.request(requestUrl, &remoteDogu, true)
+			remoteDogu, err = r.requestWithoutCredentialsFirst(requestUrl)
+			if err != nil {
+				remoteDogu, err = r.request(requestUrl, true)
+				return err
 			}
-			return requestErr
+			return err
 		})
 
 		if errors.Is(err, common.ErrNotFound) {
-			return nil, dogu.ErrDescriptorNotFound
+			return nil, commonerrors.NewGenericError(err)
 		}
 
 		err = r.writeDoguToCache(remoteDogu, dirname)
@@ -200,27 +202,27 @@ func (r *httpRemote) writeDoguToCache(dogu *core.Dogu, dirname string) error {
 	return nil
 }
 
-func (r *httpRemote) requestWithoutCredentialsFirst(requestURL string, responseType interface{}) error {
+func (r *httpRemote) requestWithoutCredentialsFirst(requestURL string) (*core.Dogu, error) {
 	core.GetLogger().Debug("Access \"" + requestURL + "\" anonymous...")
-	err := r.request(requestURL, responseType, false)
+	remoteDogu, err := r.request(requestURL, false)
 	if err != nil {
 		core.GetLogger().Debug("Anonymous access to \"" + requestURL + "\" failed. Using credentials...")
-		err = r.request(requestURL, responseType, true)
+		remoteDogu, err = r.request(requestURL, true)
 		if err != nil {
 			core.GetLogger().Debug("Access to \"" + requestURL + "\" with credentials failed...")
 		} else {
 			core.GetLogger().Debug("Access to \"" + requestURL + "\" with credentials was successfull...")
 		}
 	}
-	return err
+	return remoteDogu, err
 }
 
-func (r *httpRemote) request(requestURL string, responseType interface{}, useCredentials bool) error {
+func (r *httpRemote) request(requestURL string, useCredentials bool) (*core.Dogu, error) {
 	core.GetLogger().Debugf("fetch json from remote %s", requestURL)
 
 	request, err := http.NewRequest("GET", requestURL, nil)
 	if err != nil {
-		return fmt.Errorf("failed to prepare request: %w", err)
+		return nil, fmt.Errorf("failed to prepare request: %w", err)
 	}
 
 	if useCredentials && r.credentials != nil {
@@ -229,43 +231,41 @@ func (r *httpRemote) request(requestURL string, responseType interface{}, useCre
 
 	resp, err := r.client.Do(request)
 	if err != nil {
-		return fmt.Errorf("failed to request remote registry: %w", err)
+		return nil, fmt.Errorf("failed to request remote registry: %w", err)
 	}
 
 	err = checkStatusCode(resp)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	defer util.CloseButLogError(resp.Body, "requesting json from remove")
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
+		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	doguFromString, version, err := core.ReadDoguFromString(string(body))
 	if err != nil {
-		return fmt.Errorf("failed to parse json of request: %w", err)
+		return nil, fmt.Errorf("failed to parse json of request: %w", err)
 	}
 
 	if version == core.DoguApiV1 {
 		core.GetLogger().Warningf("Read dogu %s in v1 format from registry.", doguFromString.Name)
 	}
 	//nolint:forcetypeassert
-	*responseType.(**core.Dogu) = doguFromString
-
-	return nil
+	return doguFromString, nil
 }
 
 func checkStatusCode(response *http.Response) error {
 	sc := response.StatusCode
 	switch sc {
 	case http.StatusUnauthorized:
-		return common.ErrUnauthorized
+		return commonerrors.NewUnauthorizedError(errors.New("401 unauthorized, please login to proceed"))
 	case http.StatusForbidden:
-		return common.ErrForbidden
+		return commonerrors.NewForbiddenError(errors.New("403 forbidden, not enough privileges"))
 	case http.StatusNotFound:
-		return common.ErrNotFound
+		return commonerrors.NewNotFoundError(errors.New("404 not found"))
 	default:
 		if sc >= 300 {
 			furtherExplanation := extractRemoteBody(response.Body, sc)

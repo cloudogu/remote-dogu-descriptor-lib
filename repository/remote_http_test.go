@@ -2,7 +2,7 @@ package repository
 
 import (
 	"fmt"
-	common "github.com/cloudogu/ces-commons-lib/repository"
+	commonerrors "github.com/cloudogu/ces-commons-lib/errors"
 	"github.com/cloudogu/cesapp-lib/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -89,7 +89,7 @@ func Test_checkStatusCode(t *testing.T) {
 
 		// then
 		require.Error(t, err)
-		assert.Equal(t, common.ErrUnauthorized, err)
+		assert.True(t, commonerrors.IsUnauthorizedError(err))
 	})
 
 	t.Run("should return custom error for HTTP 403", func(t *testing.T) {
@@ -103,7 +103,7 @@ func Test_checkStatusCode(t *testing.T) {
 
 		// then
 		require.Error(t, err)
-		assert.Equal(t, common.ErrForbidden, err)
+		assert.True(t, commonerrors.IsForbiddenError(err))
 	})
 
 	t.Run("should return custom error for HTTP 404", func(t *testing.T) {
@@ -117,7 +117,7 @@ func Test_checkStatusCode(t *testing.T) {
 
 		// then
 		require.Error(t, err)
-		assert.Equal(t, common.ErrNotFound, err)
+		assert.True(t, commonerrors.IsNotFoundError(err))
 	})
 }
 
