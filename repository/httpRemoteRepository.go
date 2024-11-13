@@ -270,7 +270,7 @@ func checkStatusCode(response *http.Response) error {
 		if sc >= 300 {
 			furtherExplanation := extractRemoteBody(response.Body, sc)
 
-			return errors.Errorf("remote registry returns invalid status: %s: %s", response.Status, furtherExplanation)
+			return fmt.Errorf("remote registry returns invalid status: %s: %s", response.Status, furtherExplanation)
 		}
 
 		return nil
