@@ -13,17 +13,6 @@ import (
 )
 
 func Test_newHTTPRemote(t *testing.T) {
-	t.Run("should return an error if creating the backoff fails", func(t *testing.T) {
-		config := &core.Remote{
-			RetryPolicy: core.RetryPolicy{
-				Interval: -2,
-			},
-		}
-
-		_, err := newHTTPRemote(config, nil)
-
-		require.Error(t, err)
-	})
 	t.Run("Should return new httpRemote", func(t *testing.T) {
 		config := &core.Remote{}
 		creds := &core.Credentials{}

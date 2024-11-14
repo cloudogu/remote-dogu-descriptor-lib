@@ -22,17 +22,18 @@ import (
 	"github.com/cloudogu/cesapp-lib/core"
 	"github.com/cloudogu/cesapp-lib/remote"
 	"github.com/cloudogu/cesapp-lib/util"
+	"github.com/cloudogu/retry-lib/retry"
 	"github.com/eapache/go-resiliency/retrier"
 )
 
 var defaultBackoff = retrier.ConstantBackoff(1, 100*time.Millisecond)
+var maxTries = 20
 
 // httpRemote is able to handle request to a remote registry.
 type httpRemote struct {
 	endpoint            string
 	endpointCacheDir    string
 	credentials         *core.Credentials
-	retrier             *retrier.Retrier
 	client              *http.Client
 	urlSchema           remote.URLSchema
 	useCache            bool
@@ -40,18 +41,6 @@ type httpRemote struct {
 }
 
 func newHTTPRemote(remoteConfig *core.Remote, credentials *core.Credentials) (*httpRemote, error) {
-	backoff, err := core.GetBackoff(remoteConfig.RetryPolicy)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create httpRemote: %w", err)
-	}
-	if len(backoff) < 1 {
-		backoff = defaultBackoff
-	}
-	netRetrier := retrier.New(
-		backoff,
-		retrier.BlacklistClassifier{commonerrors.NewUnauthorizedError(errors.New("")), commonerrors.NewForbiddenError(errors.New(""))},
-	)
-
 	checkSum := fmt.Sprintf("%x", sha256.Sum256([]byte(remoteConfig.CacheDir)))
 
 	client, err := CreateHTTPClient(remoteConfig)
@@ -65,7 +54,6 @@ func newHTTPRemote(remoteConfig *core.Remote, credentials *core.Credentials) (*h
 		endpoint:            remoteConfig.Endpoint,
 		endpointCacheDir:    filepath.Join(remoteConfig.CacheDir, checkSum),
 		credentials:         credentials,
-		retrier:             netRetrier,
 		client:              client,
 		urlSchema:           urlSchema,
 		useCache:            true,
@@ -147,7 +135,7 @@ func (r *httpRemote) Get(_ context.Context, doguVersion dogu.QualifiedVersion) (
 func (r *httpRemote) receiveDoguFromRemoteOrCache(requestUrl string, dirname string) (*core.Dogu, error) {
 	var remoteDogu, err = r.readCachedDogu(dirname)
 	if err != nil {
-		err = r.retrier.Run(func() error {
+		err = retry.OnError(maxTries, isRetryError, func() error {
 			remoteDogu, err = r.requestWithoutCredentialsFirst(requestUrl)
 			if err != nil {
 				remoteDogu, err = r.request(requestUrl, true)
@@ -174,14 +162,14 @@ func (r *httpRemote) readCachedDogu(dirname string) (*core.Dogu, error) {
 		cacheFile := filepath.Join(dirname, "content.json")
 		doguFromFile, _, err := core.ReadDoguFromFile(cacheFile)
 		if err != nil {
-			return &core.Dogu{}, commonerrors.NewGenericError(fmt.Errorf("failed to read from remote registry and cache: %w", err))
+			return nil, commonerrors.NewGenericError(fmt.Errorf("failed to read from cache %s: %w", cacheFile, err))
 		}
 		if doguFromFile == nil {
 			return nil, commonerrors.NewNotFoundError(fmt.Errorf("dogu descriptor not found"))
 		}
 		return doguFromFile, nil
 	}
-	return &core.Dogu{}, commonerrors.NewGenericError(fmt.Errorf("useCache is not activated"))
+	return nil, commonerrors.NewGenericError(fmt.Errorf("useCache is not activated"))
 }
 
 func (r *httpRemote) writeDoguToCache(doguToWrite *core.Dogu, dirname string) error {
@@ -314,4 +302,8 @@ func (rb *remoteResponseBody) String() string {
 		errorField = "(no error)"
 	}
 	return fmt.Sprintf("%s: %s", statusField, errorField)
+}
+
+func isRetryError(err error) bool {
+	return commonerrors.IsUnauthorizedError(err) || commonerrors.IsForbiddenError(err)
 }
