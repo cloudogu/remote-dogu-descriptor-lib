@@ -14,6 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var testCtx = context.Background()
+
 func clearCache() {
 	_ = os.RemoveAll("/tmp/ces/cache/remote_test")
 }
@@ -42,7 +44,7 @@ func TestAnonymousOnAnonymousServer(t *testing.T) {
 		Version: version,
 	}
 
-	dogu, err := testRemote.Get(context.TODO(), qDoguVersion)
+	dogu, err := testRemote.Get(testCtx, qDoguVersion)
 	assert.NotNil(t, dogu)
 	assert.Nil(t, err)
 }
@@ -60,7 +62,7 @@ func TestGet(t *testing.T) {
 
 	testRemote := createRemote(t, ts)
 
-	dogu, err := testRemote.GetLatest(context.TODO(), dogu.QualifiedName{
+	dogu, err := testRemote.GetLatest(testCtx, dogu.QualifiedName{
 		Namespace:  "Test",
 		SimpleName: "Test",
 	})
@@ -90,7 +92,7 @@ func TestGetWithRetry(t *testing.T) {
 	defer ts.Close()
 
 	testRemote := createRemote(t, ts)
-	dogu, err := testRemote.GetLatest(context.TODO(), dogu.QualifiedName{SimpleName: "Hansolo", Namespace: "official"})
+	dogu, err := testRemote.GetLatest(testCtx, dogu.QualifiedName{SimpleName: "Hansolo", Namespace: "official"})
 	assert.Nil(t, err)
 	assert.NotNil(t, dogu)
 
@@ -126,7 +128,7 @@ func TestGetVersion(t *testing.T) {
 		Version: version,
 	}
 
-	dogu, err := testRemote.Get(context.TODO(), qDoguVersion)
+	dogu, err := testRemote.Get(testCtx, qDoguVersion)
 
 	assert.Nil(t, err)
 	assert.NotNil(t, dogu)
@@ -149,7 +151,7 @@ func TestGetCached(t *testing.T) {
 
 	testRemote := createRemote(t, ts)
 
-	doguResult, err := testRemote.GetLatest(context.TODO(), dogu.QualifiedName{
+	doguResult, err := testRemote.GetLatest(testCtx, dogu.QualifiedName{
 		Namespace:  "Test",
 		SimpleName: "Test",
 	})
@@ -159,7 +161,7 @@ func TestGetCached(t *testing.T) {
 
 	ts.Close()
 
-	doguResult, err = testRemote.GetLatest(context.TODO(), dogu.QualifiedName{
+	doguResult, err = testRemote.GetLatest(testCtx, dogu.QualifiedName{
 		Namespace:  "Test",
 		SimpleName: "Test",
 	})

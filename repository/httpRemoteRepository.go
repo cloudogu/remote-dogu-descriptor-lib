@@ -23,10 +23,8 @@ import (
 	"github.com/cloudogu/cesapp-lib/remote"
 	"github.com/cloudogu/cesapp-lib/util"
 	"github.com/cloudogu/retry-lib/retry"
-	"github.com/eapache/go-resiliency/retrier"
 )
 
-var defaultBackoff = retrier.ConstantBackoff(1, 100*time.Millisecond)
 var maxTries = 20
 
 // httpRemote is able to handle request to a remote registry.
@@ -136,11 +134,7 @@ func (r *httpRemote) receiveDoguFromRemoteOrCache(requestUrl string, dirname str
 	var remoteDogu, err = r.readCachedDogu(dirname)
 	if err != nil {
 		err = retry.OnError(maxTries, isRetryError, func() error {
-			remoteDogu, err = r.requestWithoutCredentialsFirst(requestUrl)
-			if err != nil {
-				remoteDogu, err = r.request(requestUrl, true)
-				return err
-			}
+			remoteDogu, err = r.request(requestUrl, true)
 			return err
 		})
 
@@ -192,21 +186,6 @@ func (r *httpRemote) writeDoguToCache(doguToWrite *core.Dogu, dirname string) er
 	return nil
 }
 
-func (r *httpRemote) requestWithoutCredentialsFirst(requestURL string) (*core.Dogu, error) {
-	core.GetLogger().Debug("Access \"" + requestURL + "\" anonymous...")
-	remoteDogu, err := r.request(requestURL, false)
-	if err != nil {
-		core.GetLogger().Debug("Anonymous access to \"" + requestURL + "\" failed. Using credentials...")
-		remoteDogu, err = r.request(requestURL, true)
-		if err != nil {
-			core.GetLogger().Debug("Access to \"" + requestURL + "\" with credentials failed...")
-		} else {
-			core.GetLogger().Debug("Access to \"" + requestURL + "\" with credentials was successfull...")
-		}
-	}
-	return remoteDogu, err
-}
-
 func (r *httpRemote) request(requestURL string, useCredentials bool) (*core.Dogu, error) {
 	core.GetLogger().Debugf("fetch json from remote %s", requestURL)
 
@@ -220,6 +199,12 @@ func (r *httpRemote) request(requestURL string, useCredentials bool) (*core.Dogu
 	}
 
 	resp, err := r.client.Do(request)
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+
+		}
+	}(resp.Body)
 	if err != nil {
 		return nil, commonerrors.NewGenericError(fmt.Errorf("failed to request remote registry: %w", err))
 	}
@@ -256,6 +241,8 @@ func checkStatusCode(response *http.Response) error {
 		return commonerrors.NewForbiddenError(errors.New("403 forbidden, not enough privileges"))
 	case http.StatusNotFound:
 		return commonerrors.NewNotFoundError(errors.New("404 not found"))
+	case http.StatusInternalServerError:
+		return commonerrors.NewConnectionError(errors.New("500 internal server error"))
 	default:
 		if sc >= 300 {
 			furtherExplanation := extractRemoteBody(response.Body, sc)
@@ -305,5 +292,5 @@ func (rb *remoteResponseBody) String() string {
 }
 
 func isRetryError(err error) bool {
-	return commonerrors.IsUnauthorizedError(err) || commonerrors.IsForbiddenError(err)
+	return commonerrors.IsUnauthorizedError(err) || commonerrors.IsForbiddenError(err) || commonerrors.IsConnectionError(err)
 }
