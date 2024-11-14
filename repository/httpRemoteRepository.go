@@ -184,14 +184,14 @@ func (r *httpRemote) readCachedDogu(dirname string) (*core.Dogu, error) {
 	return &core.Dogu{}, commonerrors.NewGenericError(fmt.Errorf("useCache is not activated"))
 }
 
-func (r *httpRemote) writeDoguToCache(dogu *core.Dogu, dirname string) error {
+func (r *httpRemote) writeDoguToCache(doguToWrite *core.Dogu, dirname string) error {
 	err := os.MkdirAll(dirname, os.ModePerm)
 	if nil != err {
 		return fmt.Errorf("failed to create cache directory %s: %w", dirname, err)
 	}
 
 	cacheFile := filepath.Join(dirname, "content.json")
-	err = core.WriteDoguToFile(cacheFile, dogu)
+	err = core.WriteDoguToFile(cacheFile, doguToWrite)
 
 	if nil != err {
 		removeErr := os.Remove(cacheFile)
