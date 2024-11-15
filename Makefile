@@ -1,5 +1,5 @@
 ARTIFACT_ID=remote-dogu-descriptor-lib
-VERSION=0.0.0
+VERSION=0.1.0
 
 MAKEFILES_VERSION=9.3.2
 .DEFAULT_GOAL:=help
