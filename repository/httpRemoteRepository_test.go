@@ -23,6 +23,31 @@ func Test_newHTTPRemote(t *testing.T) {
 	})
 }
 
+func Test_createProxyHTTPTransport(t *testing.T) {
+	t.Run("create transport", func(t *testing.T) {
+		// given
+		config := &core.Remote{
+			ProxySettings: core.ProxySettings{
+				Enabled:  true,
+				Server:   "1.2.3.4",
+				Port:     80,
+				Username: "user",
+				Password: "password",
+			},
+		}
+
+		// when
+		transport, err := createProxyHTTPTransport(config)
+		proxy, err := transport.Proxy(nil)
+		require.NoError(t, err)
+
+		// then
+		require.NoError(t, err)
+		assert.Equal(t, "http://1.2.3.4:80", proxy.String())
+		assert.Equal(t, "Basic dXNlcjpwYXNzd29yZA==", transport.ProxyConnectHeader.Get("Proxy-Authorization"))
+	})
+}
+
 func Test_checkStatusCode(t *testing.T) {
 	t.Run("should return nil for HTTP 200", func(t *testing.T) {
 		mockResp := &http.Response{}
@@ -99,7 +124,7 @@ func Test_checkStatusCode(t *testing.T) {
 		mockResp := &http.Response{}
 		mockResp.Status = http.StatusText(http.StatusNotFound)
 		mockResp.StatusCode = http.StatusNotFound
-		mockResp.Body = ioutil.NopCloser(strings.NewReader(`{"status": "forbidden"}`))
+		mockResp.Body = ioutil.NopCloser(strings.NewReader(`{"status": "not found"}`))
 
 		// when
 		err := checkStatusCode(mockResp)
