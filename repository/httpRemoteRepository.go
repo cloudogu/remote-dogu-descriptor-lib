@@ -80,7 +80,7 @@ func createProxyHTTPTransport(config *core.Remote) (*http.Transport, error) {
 
 		proxyURL, err := neturl.Parse(proxyURLString)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse proxy url %s: %w", proxyURLString, err)
+			return nil, commonerrors.NewGenericError(fmt.Errorf("failed to parse proxy url %s: %w", proxyURLString, err))
 		}
 		transport.Proxy = http.ProxyURL(proxyURL)
 		appendProxyAuthorizationIfRequired(transport, &config.ProxySettings)
@@ -109,7 +109,7 @@ func appendProxyAuthorizationIfRequired(transport *http.Transport, proxySettings
 func (r *httpRemote) GetLatest(_ context.Context, name dogu.QualifiedName) (*core.Dogu, error) {
 	err := name.Validate()
 	if err != nil {
-		return nil, fmt.Errorf("qualified dogu name is not valid (name: %s): %w", name.String(), err)
+		return nil, commonerrors.NewGenericError(fmt.Errorf("qualified dogu name is not valid (name: %s): %w", name.String(), err))
 	}
 	requestUrl := r.urlSchema.Get(name.String())
 	cacheDirectory := filepath.Join(r.endpointCacheDir, name.String())
@@ -120,7 +120,7 @@ func (r *httpRemote) GetLatest(_ context.Context, name dogu.QualifiedName) (*cor
 func (r *httpRemote) Get(_ context.Context, doguVersion dogu.QualifiedVersion) (*core.Dogu, error) {
 	err := doguVersion.Name.Validate()
 	if err != nil {
-		return nil, fmt.Errorf("qualified dogu name is not valid (name: %s): %w", doguVersion.Name.String(), err)
+		return nil, commonerrors.NewGenericError(fmt.Errorf("qualified dogu name is not valid (name: %s): %w", doguVersion.Name.String(), err))
 	}
 	requestUrl := r.urlSchema.GetVersion(doguVersion.Name.String(), doguVersion.Version.Raw)
 	cacheDirectory := filepath.Join(r.endpointCacheDir, doguVersion.Name.String(), doguVersion.Version.Raw)
@@ -163,7 +163,7 @@ func (r *httpRemote) readCachedDogu(dirname string) (*core.Dogu, error) {
 func (r *httpRemote) writeDoguToCache(doguToWrite *core.Dogu, dirname string) error {
 	err := os.MkdirAll(dirname, os.ModePerm)
 	if err != nil {
-		return fmt.Errorf("failed to create cache directory %s: %w", dirname, err)
+		return commonerrors.NewGenericError(fmt.Errorf("failed to create cache directory %s: %w", dirname, err))
 	}
 
 	cacheFile := filepath.Join(dirname, "content.json")
@@ -174,7 +174,7 @@ func (r *httpRemote) writeDoguToCache(doguToWrite *core.Dogu, dirname string) er
 		if removeErr != nil {
 			core.GetLogger().Warningf("failed to remove cache file %s", cacheFile)
 		}
-		return fmt.Errorf("failed to write cache %s: %w", cacheFile, err)
+		return commonerrors.NewGenericError(fmt.Errorf("failed to write cache %s: %w", cacheFile, err))
 	}
 
 	return nil
@@ -241,7 +241,7 @@ func checkStatusCode(response *http.Response) error {
 		if sc >= 300 {
 			furtherExplanation := extractRemoteBody(response.Body, sc)
 
-			return fmt.Errorf("remote registry returns invalid status: %s: %s", response.Status, furtherExplanation)
+			return commonerrors.NewGenericError(fmt.Errorf("remote registry returns invalid status: %s: %s", response.Status, furtherExplanation))
 		}
 
 		return nil
