@@ -3,7 +3,7 @@ module github.com/cloudogu/remote-dogu-descriptor-lib
 go 1.23.1
 
 require (
-	github.com/cloudogu/ces-commons-lib v0.0.0-20241113093231-55d3fef793db
+	github.com/cloudogu/ces-commons-lib v0.1.0
 	github.com/cloudogu/cesapp-lib v0.15.0
 	github.com/eapache/go-resiliency v1.2.0
 	github.com/pkg/errors v0.9.1
