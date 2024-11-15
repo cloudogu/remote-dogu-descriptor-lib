@@ -4,7 +4,7 @@ go 1.23.1
 
 require (
 	github.com/cloudogu/ces-commons-lib v0.0.0-20241113093231-55d3fef793db
-	github.com/cloudogu/cesapp-lib v0.14.2
+	github.com/cloudogu/cesapp-lib v0.15.0
 	github.com/eapache/go-resiliency v1.2.0
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.9.0

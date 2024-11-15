@@ -22,10 +22,7 @@ import (
 	"github.com/cloudogu/cesapp-lib/core"
 	"github.com/cloudogu/cesapp-lib/remote"
 	"github.com/cloudogu/cesapp-lib/util"
-	"github.com/cloudogu/retry-lib/retry"
 )
-
-var maxTries = 20
 
 // httpRemote is able to handle request to a remote registry.
 type httpRemote struct {
@@ -133,10 +130,7 @@ func (r *httpRemote) Get(_ context.Context, doguVersion dogu.QualifiedVersion) (
 func (r *httpRemote) receiveDoguFromRemoteOrCache(requestUrl string, dirname string) (*core.Dogu, error) {
 	var remoteDogu, err = r.readCachedDogu(dirname)
 	if err != nil {
-		err = retry.OnError(maxTries, isRetryError, func() error {
-			remoteDogu, err = r.request(requestUrl, true)
-			return err
-		})
+		remoteDogu, err = r.request(requestUrl)
 
 		if err != nil {
 			return nil, err
@@ -144,7 +138,7 @@ func (r *httpRemote) receiveDoguFromRemoteOrCache(requestUrl string, dirname str
 
 		err = r.writeDoguToCache(remoteDogu, dirname)
 		if err != nil {
-			return &core.Dogu{}, fmt.Errorf("failed to write dogu to cache: %w", err)
+			core.GetLogger().Errorf("get dogu request was ok but failed to write dogu to cache: %w", err)
 		}
 	}
 
@@ -168,14 +162,14 @@ func (r *httpRemote) readCachedDogu(dirname string) (*core.Dogu, error) {
 
 func (r *httpRemote) writeDoguToCache(doguToWrite *core.Dogu, dirname string) error {
 	err := os.MkdirAll(dirname, os.ModePerm)
-	if nil != err {
+	if err != nil {
 		return fmt.Errorf("failed to create cache directory %s: %w", dirname, err)
 	}
 
 	cacheFile := filepath.Join(dirname, "content.json")
 	err = core.WriteDoguToFile(cacheFile, doguToWrite)
 
-	if nil != err {
+	if err != nil {
 		removeErr := os.Remove(cacheFile)
 		if removeErr != nil {
 			core.GetLogger().Warningf("failed to remove cache file %s", cacheFile)
@@ -186,7 +180,7 @@ func (r *httpRemote) writeDoguToCache(doguToWrite *core.Dogu, dirname string) er
 	return nil
 }
 
-func (r *httpRemote) request(requestURL string, useCredentials bool) (*core.Dogu, error) {
+func (r *httpRemote) request(requestURL string) (*core.Dogu, error) {
 	core.GetLogger().Debugf("fetch json from remote %s", requestURL)
 
 	request, err := http.NewRequest("GET", requestURL, nil)
@@ -194,15 +188,15 @@ func (r *httpRemote) request(requestURL string, useCredentials bool) (*core.Dogu
 		return nil, commonerrors.NewGenericError(fmt.Errorf("failed to prepare request: %w", err))
 	}
 
-	if useCredentials && r.credentials != nil {
+	if r.credentials != nil {
 		request.SetBasicAuth(r.credentials.Username, r.credentials.Password)
 	}
 
 	resp, err := r.client.Do(request)
 	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-
+		errClose := Body.Close()
+		if errClose != nil {
+			core.GetLogger().Errorf("failed to close body: %w", errClose)
 		}
 	}(resp.Body)
 	if err != nil {
@@ -228,7 +222,7 @@ func (r *httpRemote) request(requestURL string, useCredentials bool) (*core.Dogu
 	if version == core.DoguApiV1 {
 		core.GetLogger().Warningf("Read dogu %s in v1 format from registry.", doguFromString.Name)
 	}
-	//nolint:forcetypeassert
+
 	return doguFromString, nil
 }
 
@@ -289,8 +283,4 @@ func (rb *remoteResponseBody) String() string {
 		errorField = "(no error)"
 	}
 	return fmt.Sprintf("%s: %s", statusField, errorField)
-}
-
-func isRetryError(err error) bool {
-	return commonerrors.IsUnauthorizedError(err) || commonerrors.IsForbiddenError(err) || commonerrors.IsConnectionError(err)
 }

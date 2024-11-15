@@ -14,10 +14,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var testCtx = context.Background()
+var (
+	testCtx      = context.Background()
+	testCacheDir = "/tmp/ces/cache/remote_test"
+)
 
 func clearCache() {
-	_ = os.RemoveAll("/tmp/ces/cache/remote_test")
+	_ = os.RemoveAll(testCacheDir)
 }
 
 func TestAnonymousOnAnonymousServer(t *testing.T) {
@@ -32,7 +35,8 @@ func TestAnonymousOnAnonymousServer(t *testing.T) {
 	defer ts.Close()
 	testRemote := createRemoteWithConfiguration(t, ts, &core.Remote{
 		AnonymousAccess: true,
-	})
+		CacheDir:        testCacheDir,
+	}, false)
 	version, err := core.ParseVersion("3.0")
 	require.NoError(t, err)
 
@@ -72,34 +76,6 @@ func TestGet(t *testing.T) {
 
 	assert.Equal(t, "Test", dogu.Name)
 	assert.Equal(t, "3.0", dogu.Version)
-
-	clearCache()
-}
-
-func TestGetWithRetry(t *testing.T) {
-	counter := 0
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if counter > 0 {
-			data, err := core.WriteDoguToString(&core.Dogu{Name: "official/Hansolo", Version: "3.0"})
-			assert.Nil(t, err)
-			w.Write([]byte(data))
-			w.WriteHeader(200)
-		} else {
-			counter++
-			w.WriteHeader(500)
-		}
-	}))
-	defer ts.Close()
-
-	testRemote := createRemote(t, ts)
-	dogu, err := testRemote.GetLatest(testCtx, dogu.QualifiedName{SimpleName: "Hansolo", Namespace: "official"})
-	assert.Nil(t, err)
-	assert.NotNil(t, dogu)
-
-	assert.Equal(t, "official/Hansolo", dogu.Name)
-	assert.Equal(t, "3.0", dogu.Version)
-
-	assert.Equal(t, 1, counter)
 
 	clearCache()
 }
@@ -176,15 +152,20 @@ func createRemote(t *testing.T, ts *httptest.Server) *httpRemote {
 	return createRemoteWithURLScheme(t, ts, "")
 }
 
-func createRemoteWithConfiguration(t *testing.T, ts *httptest.Server, remoteConf *core.Remote) *httpRemote {
+func createRemoteWithConfiguration(t *testing.T, ts *httptest.Server, remoteConf *core.Remote, withCredentials bool) *httpRemote {
 	t.Helper()
 	remoteConf.Endpoint = ts.URL
-	rem, err := newHTTPRemote(
-		remoteConf,
-		&core.Credentials{
+	var credentials *core.Credentials
+	if withCredentials {
+		credentials = &core.Credentials{
 			Username: "trillian",
 			Password: "secret",
-		},
+		}
+	}
+
+	rem, err := newHTTPRemote(
+		remoteConf,
+		credentials,
 	)
 	assert.Nil(t, err)
 	assert.NotNil(t, rem)
@@ -195,7 +176,7 @@ func createRemoteWithURLScheme(t *testing.T, ts *httptest.Server, urlScheme stri
 	testRemote, err := newHTTPRemote(
 		&core.Remote{
 			Endpoint:  ts.URL,
-			CacheDir:  "/tmp/ces/cache/remote_test",
+			CacheDir:  testCacheDir,
 			URLSchema: urlScheme,
 		},
 		&core.Credentials{
