@@ -193,7 +193,7 @@ func (r *httpRemote) request(requestURL string) (*core.Dogu, error) {
 
 	resp, err := r.client.Do(request)
 	if err != nil {
-		return nil, commonerrors.NewGenericError(fmt.Errorf("failed to request remote registry: %w", err))
+		return nil, commonerrors.NewConnectionError(fmt.Errorf("failed to request remote registry: %w", err))
 	}
 
 	err = checkStatusCode(resp)
