@@ -21,7 +21,6 @@ import (
 
 	"github.com/cloudogu/cesapp-lib/core"
 	"github.com/cloudogu/cesapp-lib/remote"
-	"github.com/cloudogu/cesapp-lib/util"
 )
 
 // httpRemote is able to handle request to a remote registry.
@@ -193,12 +192,6 @@ func (r *httpRemote) request(requestURL string) (*core.Dogu, error) {
 	}
 
 	resp, err := r.client.Do(request)
-	defer func(Body io.ReadCloser) {
-		errClose := Body.Close()
-		if errClose != nil {
-			core.GetLogger().Errorf("failed to close body: %w", errClose)
-		}
-	}(resp.Body)
 	if err != nil {
 		return nil, commonerrors.NewGenericError(fmt.Errorf("failed to request remote registry: %w", err))
 	}
@@ -208,7 +201,15 @@ func (r *httpRemote) request(requestURL string) (*core.Dogu, error) {
 		return nil, err
 	}
 
-	defer util.CloseButLogError(resp.Body, "requesting json from remove")
+	defer func() {
+		if resp != nil && resp.Body != nil {
+			errClose := resp.Body.Close()
+			if errClose != nil {
+				core.GetLogger().Errorf("failed to close body: %w", errClose)
+			}
+		}
+	}()
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, commonerrors.NewGenericError(fmt.Errorf("failed to read response body: %w", err))
